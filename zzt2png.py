@@ -72,61 +72,61 @@ def render(board, stat_data, render_num):
         fg = COLORS[color % 16];
         source = GRAPHICS[fg]
         
-        if element == 0: # Empties
-            source = GRAPHICS["000000"]
-            bg = COLORS[0]
-            char = get_char(color, source, bg)
-        elif element >= 47 and element <= 69: # Text
-            source = GRAPHICS["FCFCFC"]
-            if (element != 53):
-                char = get_char(color, source, COLORS[int(((element-46)*16 + 15)/16)])
-            else: # White Text
-                char = get_char(color, source, COLORS[0])
-        elif element == 28 and INVISIBLE_MODE != 0: # Invisible walls
-            if INVISIBLE_MODE == 1:
-                char = get_char(176, source, bg)
-            else:
-                char = get_char(219, source, bg)
-        elif element == 36: # Object
-            for stat in stat_data:
-                if stat["x"] - 1 == x/8 and stat["y"] - 1 == y/14:
-                    char = get_char(stat["param1"], source, bg)
-                    break
-            if not char:
-                char = get_char(CHARACTERS[element], source, bg)
-        elif element == 40: # Pusher
-            pusher_char = 16
-            for stat in stat_data:
-                if stat["x"] - 1 == x/8 and stat["y"] - 1 == y/14:
-                    if (stat["y-step"] > 32767):
-                        pusher_char = 30
-                    elif (stat["y-step"] > 0):
-                        pusher_char = 31
-                    elif (stat["x-step"] > 32767):
-                        pusher_char = 17
-                    break
-            char = get_char(pusher_char, source, bg)
-        elif element == 30: # Transporter
-            transporter_char = 62
-            for stat in stat_data:
-                if stat["x"] - 1 == x/8 and stat["y"] - 1 == y/14:
-                    if (stat["y-step"] > 32767):
-                        transporter_char = 94
-                    elif (stat["y-step"] > 0):
-                        transporter_char = 118
-                    elif (stat["x-step"] > 32767):
-                        transporter_char = 60
-                    break
-            char = get_char(transporter_char, source, bg)
-        elif element == 31: # Line Walls
-            for q in xrange(0, quantity):
-                line_walls[((y/14)*60)+(x/8)+q] = 1;
-                line_colors[((y/14)*60)+(x/8)+q] = color;
-            char = get_char(32, source, bg)
-        else:
-            char = get_char(CHARACTERS[element], source, bg)
+        for q in xrange(0,quantity):
         
-        for _ in xrange(0,quantity):
+            if element == 0: # Empties
+                source = GRAPHICS["000000"]
+                bg = COLORS[0]
+                char = get_char(color, source, bg)
+            elif element >= 47 and element <= 69: # Text
+                source = GRAPHICS["FCFCFC"]
+                if (element != 53):
+                    char = get_char(color, source, COLORS[int(((element-46)*16 + 15)/16)])
+                else: # White Text
+                    char = get_char(color, source, COLORS[0])
+            elif element == 28 and INVISIBLE_MODE != 0: # Invisible walls
+                if INVISIBLE_MODE == 1:
+                    char = get_char(176, source, bg)
+                else:
+                    char = get_char(219, source, bg)
+            elif element == 36: # Object
+                for stat in stat_data:
+                    if stat["x"] - 1 == x/8 and stat["y"] - 1 == y/14:
+                        char = get_char(stat["param1"], source, bg)
+                        break
+                if not char:
+                    char = get_char(CHARACTERS[element], source, bg)
+            elif element == 40: # Pusher
+                pusher_char = 16
+                for stat in stat_data:
+                    if stat["x"] - 1 == x/8 and stat["y"] - 1 == y/14:
+                        if (stat["y-step"] > 32767):
+                            pusher_char = 30
+                        elif (stat["y-step"] > 0):
+                            pusher_char = 31
+                        elif (stat["x-step"] > 32767):
+                            pusher_char = 17
+                        break
+                char = get_char(pusher_char, source, bg)
+            elif element == 30: # Transporter
+                transporter_char = 62
+                for stat in stat_data:
+                    if stat["x"] - 1 == x/8 and stat["y"] - 1 == y/14:
+                        if (stat["y-step"] > 32767):
+                            transporter_char = 94
+                        elif (stat["y-step"] > 0):
+                            transporter_char = 118
+                        elif (stat["x-step"] > 32767):
+                            transporter_char = 60
+                        break
+                char = get_char(transporter_char, source, bg)
+            elif element == 31: # Line Walls
+                line_walls[((y/14)*60)+(x/8)] = 1;
+                line_colors[((y/14)*60)+(x/8)] = color;
+                char = get_char(32, source, bg)
+            else:
+                char = get_char(CHARACTERS[element], source, bg)
+            
             canvas.paste(char, (x,y))
             x += 8
             if x >= 480:
