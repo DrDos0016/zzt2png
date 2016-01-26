@@ -4,10 +4,11 @@ import sys, os, binascii, random
 
 INVISIBLE_MODE  = 1 # 0: render as an empty tile | 1: render in editor style | 2: render as touched
 
+BASE_DIR        = "/var/projects/misc/zzt2png/"
 COLORS          = ["000000", "0000A8", "00A800", "00A8A8", "A80000", "A800A8", "A85400", "A8A8A8", "545454", "5454FC", "54FC54", "54FCFC", "FC5454", "FC54FC", "FCFC54", "FCFCFC"]
 CHARACTERS      = [32, 32, 63, 32, 2, 132, 157, 4, 12, 10, 232, 240, 250, 11, 127, 47, 47, 47, 248, 176, 176, 219, 178, 177, 254, 18, 29, 178, 32, 206, 62, 249, 42, 205, 153, 5, 2, 42, 94, 24, 16, 234, 227, 186, 233, 79, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63]
 LINE_CHARACTERS = {"0000":249, "0001":181, "0010":198, "0011":205, "0100":210, "0101":187, "0110":201, "0111":203, "1000":208, "1001":188, "1010":200, "1011":202, "1100":186, "1101":185, "1110":204, "1111":206}
-GRAPHICS        = {"000000":Image.open("gfx/black.png"), "0000A8":Image.open("gfx/darkblue.png"), "00A800":Image.open("gfx/darkgreen.png"), "00A8A8":Image.open("gfx/darkcyan.png"), "A80000":Image.open("gfx/darkred.png"), "A800A8":Image.open("gfx/darkpurple.png"), "A85400":Image.open("gfx/darkyellow.png"), "A8A8A8":Image.open("gfx/gray.png"), "545454":Image.open("gfx/darkgray.png"), "5454FC":Image.open("gfx/blue.png"), "54FC54":Image.open("gfx/green.png"), "54FCFC":Image.open("gfx/cyan.png"), "FC5454":Image.open("gfx/red.png"), "FC54FC":Image.open("gfx/purple.png"), "FCFC54":Image.open("gfx/yellow.png"), "FCFCFC":Image.open("gfx/white.png")}
+GRAPHICS        = {"000000":Image.open(BASE_DIR+"gfx/black.png"), "0000A8":Image.open(BASE_DIR+"gfx/darkblue.png"), "00A800":Image.open(BASE_DIR+"gfx/darkgreen.png"), "00A8A8":Image.open(BASE_DIR+"gfx/darkcyan.png"), "A80000":Image.open(BASE_DIR+"gfx/darkred.png"), "A800A8":Image.open(BASE_DIR+"gfx/darkpurple.png"), "A85400":Image.open(BASE_DIR+"gfx/darkyellow.png"), "A8A8A8":Image.open(BASE_DIR+"gfx/gray.png"), "545454":Image.open(BASE_DIR+"gfx/darkgray.png"), "5454FC":Image.open(BASE_DIR+"gfx/blue.png"), "54FC54":Image.open(BASE_DIR+"gfx/green.png"), "54FCFC":Image.open(BASE_DIR+"gfx/cyan.png"), "FC5454":Image.open(BASE_DIR+"gfx/red.png"), "FC54FC":Image.open(BASE_DIR+"gfx/purple.png"), "FCFC54":Image.open(BASE_DIR+"gfx/yellow.png"), "FCFCFC":Image.open(BASE_DIR+"gfx/white.png")}
 
 def open_binary(path):
     flags = os.O_RDONLY
@@ -57,7 +58,7 @@ def get_char(char, source, bg="000000"):
 def render(board, stat_data, render_num):
     x,y = (0,0)
     
-    canvas = Image.new("RGB", (480,350))
+    canvas = Image.new("RGBA", (480,350))
     
     line_walls = {} # I am still not happy with this solution
     line_colors = {}
@@ -124,6 +125,9 @@ def render(board, stat_data, render_num):
                 line_walls[((y/14)*60)+(x/8)] = 1;
                 line_colors[((y/14)*60)+(x/8)] = color;
                 char = get_char(32, source, bg)
+            elif element == 4 and render_num == 0: # On the title screen, replace the player with a monitor
+                if stat_data[0]["x"] - 1 == x/8 and stat_data[0]["y"] - 1 == y/14:
+                    char = get_char(32, GRAPHICS["000000"], COLORS[0])
             else:
                 char = get_char(CHARACTERS[element], source, bg)
             
@@ -165,7 +169,7 @@ def render(board, stat_data, render_num):
             tile_x = (line_idx % 60)
             tile_y = (line_idx / 60)
             canvas.paste(char, (tile_x*8,tile_y*14))
-        
+  
     return canvas
 
 def main():
@@ -183,7 +187,7 @@ def main():
         output = raw_input("Choice: ")
     else:
         file_name = sys.argv[1]
-        render_num = int(sys.argv[2])
+        render_num = sys.argv[2]
         output = sys.argv[3]
     
     file = open_binary(file_name)
@@ -194,6 +198,8 @@ def main():
     
     if render_num == "?":
         render_num = random.randint(0,board_count)
+    if render_num != "?" and render_num != "A":
+        render_num = int(render_num)
 
     boards = []
     names = []
