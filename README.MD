@@ -18,7 +18,7 @@ Additionally the INVISIBLE_MODE constant can be manually edited to change how in
 
 ## Known Issues
 
-Whoops, I forgot to replace the player on title screens with a monitor instead.
+Bombs do not have their stats looked at when rendering their image, thus pre-lit bombs appear no different from regular bombs.
 
 ## License
 
