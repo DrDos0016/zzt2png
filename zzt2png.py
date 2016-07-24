@@ -12,7 +12,7 @@ BASE_DIR = "C:\\Users\\Kevin\\Documents\\programming\\zzt2png\\"
 BG_COLORS = ("000000", "0000A8", "00A800", "00A8A8", "A80000", "A800A8", "A85400", "A8A8A8",
              "545454", "5454FC", "54FC54", "54FCFC", "FC5454", "FC54FC", "FCFC54", "FCFCFC")
 CHARACTERS = (32, 32, 63, 32, 2, 132, 157, 4, 12, 10, 232, 240, 250, 11, 127, 47, 47, 47, 248, 176, 176, 219, 178, 177,
-              254, 18, 29, 178, 32, 206, 62, 249, 42, 205, 153, 5, 2, 42, 94, 24, 16, 234, 227, 186, 233, 79, 63, 63,
+              254, 18, 29, 178, 32, 206, 94, 249, 42, 205, 153, 5, 2, 42, 94, 24, 31, 234, 227, 186, 233, 79, 63, 63,
               63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63)
 FG_GRAPHICS = (Image.open(BASE_DIR + "gfx/black.png"), Image.open(BASE_DIR + "gfx/darkblue.png"),
                Image.open(BASE_DIR + "gfx/darkgreen.png"), Image.open(BASE_DIR + "gfx/darkcyan.png"),
@@ -36,23 +36,17 @@ def open_binary(path):
 
 def read(world_file):
     """Read one byte as an int"""
-    try:
-        temp = ord(os.read(world_file, 1))
-        return temp
-    except TypeError:
-        raise EOFError
-    except OSError:
-        return 0
+
+    temp = ord(os.read(world_file, 1))
+    return temp
 
 
 def read2(world_file):
     """Read 2 bytes and convert to an integer"""
-    try:
-        part1 = binascii.hexlify(str(os.read(world_file, 1)))
-        part2 = binascii.hexlify(str(os.read(world_file, 1)))
-        return int(part2 + part1, 16)
-    except ValueError:
-        return 0
+
+    part1 = binascii.hexlify(str(os.read(world_file, 1)))
+    part2 = binascii.hexlify(str(os.read(world_file, 1)))
+    return int(part2 + part1, 16)
 
 
 def sread(world_file, num):
@@ -62,17 +56,14 @@ def sread(world_file, num):
     for x in xrange(0, num):
         array.append(binascii.hexlify(str(os.read(world_file, 1))))
     for x in xrange(0, num):
-        try:
-            temp += chr(int(array[x], 16))
-        except ValueError:
-            temp += "X"
+        temp += chr(int(array[x], 16))
     return temp
 
 
-def get_tile(char, fg_color, bg_color=0):
-    ch_x = char % 16
-    ch_y = int(char / 16)
-    tile = Image.new("RGBA", (8, 14), color="#" + BG_COLORS[bg_color])
+def get_tile(char, fg_color, bg_color=0x0):
+    ch_x = char % 0x10
+    ch_y = int(char / 0x10)
+    tile = Image.new("RGBA", (8, 14), color="#" + BG_COLORS[bg_color % 0x8])
     temp = FG_GRAPHICS[fg_color].crop((ch_x * 8, ch_y * 14, ch_x * 8 + 8, ch_y * 14 + 14))
 
     tile = Image.alpha_composite(tile, temp)
@@ -139,13 +130,14 @@ def parse(file_name):
                 stat_data.append(stat)
                 parsed_stats += 1
 
+            # Boards don't get appended to the list until finished so incomplete boards aren't included
             boards.append({
                 "name": board_name,
                 "tiles": tiles,
                 "stats": stat_data
             })
             board_offset += board_size + 2
-    except EOFError:
+    except (TypeError, ValueError, OSError, EOFError):
         pass  # I thought this would catch superlocked files, but maybe not??
 
     return boards
@@ -161,81 +153,91 @@ def render(tiles, stat_data, render_num):
             element = tile["element"]
             color = tile["color"]
 
-            fg_color = color % 16
-            bg_color = int(color / 16)
+            fg_color = color % 0x10
+            bg_color = int(color / 0x10)
 
-            if element == 0:  # Empties
-                char = get_tile(color, 0, 0)
-            elif 47 <= element <= 69:  # Text
-                if element != 53:
-                    char = get_tile(color, 15, int(((element - 46) * 16 + 15) / 16))
-                else:  # White Text
-                    char = get_tile(color, 15, 0)
-            elif element == 28 and INVISIBLE_MODE != 0:  # Invisible walls
+            char = None
+            if element == 0x00:  # Empty
+                char = get_tile(color, 0x0, 0x0)
+            elif element == 0x04 and render_num == 0 and stat_data[0]["x"] - 1 == x and stat_data[0]["y"] - 1 == y:
+                # On the title screen, replace the true player with a monitor
+                char = get_tile(32, 0x0, 0x0)
+            elif element == 0x0C:  # Duplicator
+                stat = get_stats(x, y, stat_data)
+                if stat is not None:
+                    if stat["param1"] is 2:
+                        duplicator_char = 249  # ∙
+                    elif stat["param1"] is 3:
+                        duplicator_char = 248  # °
+                    elif stat["param1"] is 4:
+                        duplicator_char = 111  # o
+                    elif stat["param1"] is 5:
+                        duplicator_char = 79  # O
+                    else:  # Includes malformed param1
+                        duplicator_char = 250  # ·
+                    char = get_tile(duplicator_char, fg_color, bg_color)
+            elif element == 0x0D:  # Bomb
+                stat = get_stats(x, y, stat_data)
+                if stat is not None and 2 <= stat["param1"] <= 9:  # Countdown
+                    char = get_tile(stat["param1"]+48, fg_color, bg_color)
+            elif element == 0x1C and INVISIBLE_MODE != 0:  # Invisible wall
                 if INVISIBLE_MODE == 1:
                     char = get_tile(176, fg_color, bg_color)
                 else:
                     char = get_tile(219, fg_color, bg_color)
-            elif element == 36:  # Object
+            elif element == 0x1E:  # Transporter
+                stat = get_stats(x, y, stat_data)
+                if stat is not None:
+                    if stat["x-step"] > 32767:
+                        transporter_char = 60  # West
+                    elif stat["x-step"] > 0:
+                        transporter_char = 62  # East
+                    elif stat["y-step"] <= 32767:
+                        transporter_char = 118  # South
+                    else:
+                        transporter_char = 94  # North (or Idle)
+                    char = get_tile(transporter_char, fg_color, bg_color)
+            elif element == 0x1F:  # Line Wall
+                line_key = ""
+
+                # Is a line or board edge to the north?
+                line_key += ("1" if y == 0 or tiles[(y - 1) * 60 + x]["element"] == 31 else "0")
+
+                # Is a line or board edge to the south?
+                line_key += ("1" if y == 24 or tiles[(y + 1) * 60 + x]["element"] == 31 else "0")
+
+                # Is a line or board edge to the west?
+                line_key += ("1" if x == 59 or tiles[y * 60 + (x + 1)]["element"] == 31 else "0")
+
+                # Is a line or board edge to the east?
+                line_key += ("1" if x == 0 or tiles[y * 60 + (x - 1)]["element"] == 31 else "0")
+
+                char = get_tile(LINE_CHARACTERS[line_key], fg_color, bg_color)
+            elif element == 0x24:  # Object
                 stat = get_stats(x, y, stat_data)
                 if stat is not None:
                     char = get_tile(stat["param1"], fg_color, bg_color)
-                else:
-                    char = get_tile(CHARACTERS[element], fg_color, bg_color)
-            elif element == 40:  # Pusher
+            elif element == 0x28:  # Pusher
                 stat = get_stats(x, y, stat_data)
-                if stat is None:
-                    pusher_char = 16
-                elif stat["y-step"] > 32767:
-                    pusher_char = 30
-                elif stat["y-step"] > 0:
-                    pusher_char = 31
-                elif stat["x-step"] > 32767:
-                    pusher_char = 17
-                else:
-                    pusher_char = 16
-                char = get_tile(pusher_char, fg_color, bg_color)
-            elif element == 30:  # Transporter
-                stat = get_stats(x, y, stat_data)
-                if stat is None:
-                    transporter_char = 62  # Stat-less transporter
-                elif stat["y-step"] > 32767:
-                    transporter_char = 94
-                elif stat["y-step"] > 0:
-                    transporter_char = 118
-                elif stat["x-step"] > 32767:
-                    transporter_char = 60
-                else:
-                    transporter_char = 62
-                char = get_tile(transporter_char, fg_color, bg_color)
-            elif element == 31:  # Line Walls
-                line_key = ""
+                if stat is not None:
+                    if stat["x-step"] == 65535:
+                        pusher_char = 17  # West
+                    elif stat["x-step"] == 1:
+                        pusher_char = 16  # East
+                    elif stat["y-step"] == 65535:
+                        pusher_char = 30  # North
+                    else:
+                        pusher_char = 31  # South (or Idle)
+                    char = get_tile(pusher_char, fg_color, bg_color)
+            elif 0x2F <= element <= 0x45:  # Text (includes malformed text)
+                if element != 0x35:
+                    char = get_tile(color, 0xF, int(((element - 0x2F) * 0x10 + 0x0F) / 0x10))
+                else:  # White text
+                    char = get_tile(color, 0xF, 0x0)
+            elif element > 0x45:  # Invalid
+                char = get_tile(168, fg_color, bg_color)
 
-                if y == 0:  # Top side of board
-                    line_key += "1"
-                else:
-                    line_key += ("1" if tiles[(y - 1) * 60 + x]["element"] == 31 else "0")
-
-                if y == 24:  # Bottom side of board
-                    line_key += "1"
-                else:
-                    line_key += ("1" if tiles[(y + 1) * 60 + x]["element"] == 31 else "0")
-
-                if x == 59:  # Left side of board
-                    line_key += "1"
-                else:
-                    line_key += ("1" if tiles[y * 60 + (x + 1)]["element"] == 31 else "0")
-
-                if x == 0:  # Right side of board
-                    line_key += "1"
-                else:
-                    line_key += ("1" if tiles[y * 60 + (x - 1)]["element"] == 31 else "0")
-
-                char = get_tile(LINE_CHARACTERS[line_key], fg_color, bg_color)
-            elif element == 4 and render_num == 0 and stat_data[0]["x"] - 1 == x and stat_data[0]["y"] - 1 == y:
-                # On the title screen, replace the true player with a monitor
-                char = get_tile(32, 0, 0)
-            else:
+            if char is None:
                 char = get_tile(CHARACTERS[element], fg_color, bg_color)
 
             canvas.paste(char, (x * 8, y * 14))
