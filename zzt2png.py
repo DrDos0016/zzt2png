@@ -22,9 +22,9 @@ FG_GRAPHICS = (Image.open(BASE_DIR + "gfx/black.png"), Image.open(BASE_DIR + "gf
                Image.open(BASE_DIR + "gfx/green.png"), Image.open(BASE_DIR + "gfx/cyan.png"),
                Image.open(BASE_DIR + "gfx/red.png"), Image.open(BASE_DIR + "gfx/purple.png"),
                Image.open(BASE_DIR + "gfx/yellow.png"), Image.open(BASE_DIR + "gfx/white.png"))
-LINE_CHARACTERS = {"0000": 249, "0001": 181, "0010": 198, "0011": 205, "0100": 210, "0101": 187, "0110": 201,
-                   "0111": 203, "1000": 208, "1001": 188, "1010": 200, "1011": 202, "1100": 186, "1101": 185,
-                   "1110": 204, "1111": 206}
+LINE_CHARACTERS = {"----": 249, "---W": 181, "--E-": 198, "--EW": 205, "-S--": 210, "-S-W": 187, "-SE-": 201,
+                   "-SEW": 203, "N---": 208, "N--W": 188, "N-E-": 200, "N-EW": 202, "NS--": 186, "NS-W": 185,
+                   "NSE-": 204, "NSEW": 206}
 
 
 def open_binary(path):
@@ -60,18 +60,22 @@ def sread(world_file, num):
     return temp
 
 
-def get_tile(char, fg_color, bg_color=0x0):
+def get_tile(char, fg_color, bg_color, opaque):
     ch_x = char % 0x10
     ch_y = int(char / 0x10)
-    tile = Image.new("RGBA", (8, 14), color="#" + BG_COLORS[bg_color % 0x8])
-    temp = FG_GRAPHICS[fg_color].crop((ch_x * 8, ch_y * 14, ch_x * 8 + 8, ch_y * 14 + 14))
+    tile_bg = Image.new("RGBA", (8, 14), color="#" + BG_COLORS[bg_color % 0x8])
+    tile_fg = FG_GRAPHICS[fg_color].crop((ch_x * 8, ch_y * 14, ch_x * 8 + 8, ch_y * 14 + 14))
 
-    tile = Image.alpha_composite(tile, temp)
-    return tile
+    result = Image.alpha_composite(tile_bg, tile_fg)
+
+    if not opaque:
+        result = Image.blend(tile_bg, result, 0.7)
+
+    return result
 
 
 def get_stats(x, y, stat_data):
-    return next((stat for stat in stat_data if stat["x"] - 1 == x and stat["y"] - 1 == y), None)
+    return next((stat for stat in stat_data if x == stat["x"] - 1 and y == stat["y"] - 1), None)
 
 
 def parse(file_name):
@@ -158,10 +162,10 @@ def render(tiles, stat_data, render_num):
 
             char = None
             if element == 0x00:  # Empty
-                char = get_tile(color, 0x0, 0x0)
+                char = get_tile(color, 0x0, 0x0, True)
             elif element == 0x04 and render_num == 0 and stat_data[0]["x"] - 1 == x and stat_data[0]["y"] - 1 == y:
                 # On the title screen, replace the true player with a monitor
-                char = get_tile(32, 0x0, 0x0)
+                char = get_tile(32, 0x0, 0x0, True)
             elif element == 0x0C:  # Duplicator
                 stat = get_stats(x, y, stat_data)
                 if stat is not None:
@@ -175,16 +179,16 @@ def render(tiles, stat_data, render_num):
                         duplicator_char = 79  # O
                     else:  # Includes malformed param1
                         duplicator_char = 250  # ·
-                    char = get_tile(duplicator_char, fg_color, bg_color)
+                    char = get_tile(duplicator_char, fg_color, bg_color, True)
             elif element == 0x0D:  # Bomb
                 stat = get_stats(x, y, stat_data)
                 if stat is not None and 2 <= stat["param1"] <= 9:  # Countdown
-                    char = get_tile(stat["param1"]+48, fg_color, bg_color)
+                    char = get_tile(stat["param1"] + 48, fg_color, bg_color, True)
             elif element == 0x1C and INVISIBLE_MODE != 0:  # Invisible wall
                 if INVISIBLE_MODE == 1:
-                    char = get_tile(176, fg_color, bg_color)
+                    char = get_tile(176, fg_color, bg_color, False)
                 else:
-                    char = get_tile(219, fg_color, bg_color)
+                    char = get_tile(178, fg_color, bg_color, False)
             elif element == 0x1E:  # Transporter
                 stat = get_stats(x, y, stat_data)
                 if stat is not None:
@@ -196,27 +200,27 @@ def render(tiles, stat_data, render_num):
                         transporter_char = 118  # South
                     else:
                         transporter_char = 94  # North (or Idle)
-                    char = get_tile(transporter_char, fg_color, bg_color)
+                    char = get_tile(transporter_char, fg_color, bg_color, True)
             elif element == 0x1F:  # Line Wall
                 line_key = ""
 
                 # Is a line or board edge to the north?
-                line_key += ("1" if y == 0 or tiles[(y - 1) * 60 + x]["element"] == 31 else "0")
+                line_key += ("N" if y == 0 or tiles[(y - 1) * 60 + x]["element"] == 31 else "-")
 
                 # Is a line or board edge to the south?
-                line_key += ("1" if y == 24 or tiles[(y + 1) * 60 + x]["element"] == 31 else "0")
-
-                # Is a line or board edge to the west?
-                line_key += ("1" if x == 59 or tiles[y * 60 + (x + 1)]["element"] == 31 else "0")
+                line_key += ("S" if y == 24 or tiles[(y + 1) * 60 + x]["element"] == 31 else "-")
 
                 # Is a line or board edge to the east?
-                line_key += ("1" if x == 0 or tiles[y * 60 + (x - 1)]["element"] == 31 else "0")
+                line_key += ("E" if x == 59 or tiles[y * 60 + (x + 1)]["element"] == 31 else "-")
 
-                char = get_tile(LINE_CHARACTERS[line_key], fg_color, bg_color)
+                # Is a line or board edge to the west?
+                line_key += ("W" if x == 0 or tiles[y * 60 + (x - 1)]["element"] == 31 else "-")
+
+                char = get_tile(LINE_CHARACTERS[line_key], fg_color, bg_color, True)
             elif element == 0x24:  # Object
                 stat = get_stats(x, y, stat_data)
                 if stat is not None:
-                    char = get_tile(stat["param1"], fg_color, bg_color)
+                    char = get_tile(stat["param1"], fg_color, bg_color, True)
             elif element == 0x28:  # Pusher
                 stat = get_stats(x, y, stat_data)
                 if stat is not None:
@@ -228,17 +232,17 @@ def render(tiles, stat_data, render_num):
                         pusher_char = 30  # North
                     else:
                         pusher_char = 31  # South (or Idle)
-                    char = get_tile(pusher_char, fg_color, bg_color)
+                    char = get_tile(pusher_char, fg_color, bg_color, True)
             elif 0x2F <= element <= 0x45:  # Text (includes malformed text)
                 if element != 0x35:
-                    char = get_tile(color, 0xF, int(((element - 0x2F) * 0x10 + 0x0F) / 0x10))
+                    char = get_tile(color, 0xF, int(element - 0x2F + 1), True)
                 else:  # White text
-                    char = get_tile(color, 0xF, 0x0)
+                    char = get_tile(color, 0xF, 0x0, True)
             elif element > 0x45:  # Invalid
-                char = get_tile(168, fg_color, bg_color)
+                char = get_tile(168, fg_color, bg_color, True)
 
             if char is None:
-                char = get_tile(CHARACTERS[element], fg_color, bg_color)
+                char = get_tile(CHARACTERS[element], fg_color, bg_color, True)
 
             canvas.paste(char, (x * 8, y * 14))
 
