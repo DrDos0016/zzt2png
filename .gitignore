@@ -1,3 +1,9 @@
+.idea/
+*.png
+!gfx/**/*.png
 *.zzt
 *.ZZT
+*.brd
+*.BRD
+*.SZT
 tumblr.py
