@@ -13,7 +13,14 @@ BG_COLORS = ("000000", "0000A8", "00A800", "00A8A8", "A80000", "A800A8", "A85400
              "545454", "5454FC", "54FC54", "54FCFC", "FC5454", "FC54FC", "FCFC54", "FCFCFC")
 ZZT_DATA = {
     "width": 60,
-    "height": 25
+    "height": 25,
+    "total_flags": 10,
+    "board_start_location": 512,
+    "board_name_size": 50,
+    "board_property_padding": 16,
+    "stat_padding": 8,
+    "absent_elements": [],
+    "blank_elements": []
 }
 CHARACTERS = {
     "EMPTY": 32, "EDGE": 32, "MESSENGER": 32, "MONITOR": 32, "PLAYER": 2, "AMMO": 132, "TORCH": 157,
@@ -106,81 +113,100 @@ def get_element_character(elements, element):
     return CHARACTERS[next((key for key, value in elements.iteritems() if value == element), None)]
 
 
-def parse(file_name):
-    boards = []
+def parse_board(engine_data, world_file):
+        board = {"tiles": [], "stats": []}
+
+        board_name_length = read(world_file)
+        board["name"] = sread(world_file, engine_data["board_name_size"])[:board_name_length]
+
+        parsed_tiles = 0
+        while parsed_tiles < engine_data["height"]*engine_data["width"]:
+            quantity = read(world_file)
+            if quantity == 0:  # Just in case some weird WiL or Chronos30 world uses this
+                quantity = 256
+            element_id = read(world_file)
+            color = read(world_file)
+            for tile_count in xrange(0, quantity):
+                board["tiles"].append({"element": element_id, "color": color})
+            parsed_tiles += quantity
+
+        # Parse Stats
+        os.lseek(world_file, 86, 1)  # Skip 86 bytes of board + message info that we don't care about
+        stat_count = read2(world_file)
+
+        parsed_stats = 0
+        while parsed_stats <= stat_count:
+            stat = {"x": read(world_file), "y": read(world_file), "x-step": read2(world_file),
+                    "y-step": read2(world_file)}
+
+            os.lseek(world_file, 2, 1)
+            stat["param1"] = read(world_file)
+            stat["param2"] = read(world_file)
+            stat["param3"] = read(world_file)
+            os.lseek(world_file, 12, 1)
+            oop_length = read2(world_file)
+            os.lseek(world_file, engine_data["stat_padding"], 1)
+
+            if oop_length > 32767:  # Pre-bound element
+                oop_length = 0
+
+            if oop_length:
+                sread(world_file, oop_length)
+
+            board["stats"].append(stat)
+            parsed_stats += 1
+
+        return board
+
+
+def parse_file(file_name):
+    world = {"boards": [], "keys": [], "flags": []}
 
     try:
         world_file = open_binary(file_name)
 
-        read2(world_file)  # ZZT Bytes - Not needed
-        engine_data = ZZT_DATA
+        engine_identity = read2(world_file)  # What format is this file?
+        world["board_count"] = read2(world_file)  # Boards in file (0 means just a title screen)
+        world["ammo"] = read2(world_file)
+        world["gems"] = read2(world_file)
+        for count in xrange(0, 9):
+            world["keys"].append(read(world_file) != 0)
+        world["health"] = read2(world_file)
+        world["active_board"] = read(world_file)
 
-        board_count = read2(world_file)  # Boards in file (0 means just a title screen)
-        board_offset = 512
+        if engine_identity == 0xFFFF:
+            world["engine"] = ZZT_DATA
 
-        # Parse Board
-        for idx in xrange(0, board_count + 1):
-            os.lseek(world_file, board_offset, 0)  # Jump to board data
-            board_size = read2(world_file)
-            board_name_length = read(world_file)
-            board_name = sread(world_file, 50)[:board_name_length]
+            world["torches"] = read2(world_file)
+            world["torchlight_remaining"] = read2(world_file)
+            world["energizer_remaining"] = read2(world_file)
+            read2(world_file)  # unused data
+            world["score"] = read2(world_file)
+            name_length = read(world_file)
+            world["name"] = sread(world_file, 20)[:name_length]
+            for count in xrange(0, 9):
+                flag_length = read(world_file)
+                world["flags"].append(sread(world_file, 20)[:flag_length])
+            world["time_passed"] = read2(world_file)
+            world["time_passed2"] = read2(world_file)  # change name
+            world["is_locked"] = read(world_file)
 
-            parsed_tiles = 0
-            tiles = []
-            while parsed_tiles < engine_data["height"]*engine_data["width"]:
-                quantity = read(world_file)
-                if quantity == 0:  # Just in case some weird WiL or Chronos30 world uses this
-                    quantity = 256
-                element_id = read(world_file)
-                color = read(world_file)
-                for tile_count in xrange(0, quantity):
-                    tiles.append({"element": element_id, "color": color})
-                    parsed_tiles += 1
+            board_offset = 512  # parse boards
+            for idx in xrange(0, world["board_count"] + 1):
+                os.lseek(world_file, board_offset, 0)  # Jump to board data
+                board_size = read2(world_file)
 
-            # Parse Stats
-            os.lseek(world_file, 86, 1)  # Skip 86 bytes of board + message info that we don't care about
-            stat_count = read2(world_file)
-            stat_data = []
-            parsed_stats = 0
-
-            while parsed_stats <= stat_count:
-                stat = {"x": read(world_file), "y": read(world_file), "x-step": read2(world_file),
-                        "y-step": read2(world_file)}
-
-                os.lseek(world_file, 2, 1)
-                stat["param1"] = read(world_file)
-                stat["param2"] = read(world_file)
-                stat["param3"] = read(world_file)
-                os.lseek(world_file, 12, 1)
-                oop_length = read2(world_file)
-                os.lseek(world_file, 8, 1)
-
-                if oop_length > 32767:  # Pre-bound element
-                    oop_length = 0
-
-                if oop_length:
-                    sread(world_file, oop_length)
-
-                stat_data.append(stat)
-                parsed_stats += 1
-
-            # Boards don't get appended to the list until finished so incomplete boards aren't included
-            boards.append({
-                "name": board_name,
-                "tiles": tiles,
-                "stats": stat_data
-            })
-            board_offset += board_size + 2
+                # Boards don't get appended to the list until finished so incomplete boards aren't included
+                world["boards"].append(parse_board(world["engine"], world_file))
+                board_offset += board_size + 2
     except (TypeError, ValueError, OSError, EOFError):
         pass  # I thought this would catch superlocked files, but maybe not??
 
-    return boards
+    return world
 
 
-def render(tiles, stat_data, render_num):
+def render(tiles, stat_data, engine_data, render_num):
     canvas = Image.new("RGBA", (480, 350))
-
-    engine_data = ZZT_DATA
     elements = get_elements_dict(engine_data)
 
     tile_dispenser = (tile for tile in tiles)
@@ -301,11 +327,12 @@ def main():
         render_num = sys.argv[2]
         output = sys.argv[3]
 
-    boards = parse(file_name)
+    world = parse_file(file_name)
+    boards = world["boards"]
 
     if render_num == "A":
         for idx in xrange(0, len(boards) - 1):
-            canvas = render(boards[idx]["tiles"], boards[idx]["stats"], idx)
+            canvas = render(boards[idx]["tiles"], boards[idx]["stats"], world["engine"], idx)
             canvas.save(output + "-" + ("0" + str(idx))[-2:] + ".png")
             print boards[idx]["name"]
     else:
@@ -313,7 +340,7 @@ def main():
             render_num = random.randint(0, len(boards) - 1)
         else:
             render_num = int(render_num)
-        canvas = render(boards[render_num]["tiles"], boards[render_num]["stats"], render_num)
+        canvas = render(boards[render_num]["tiles"], boards[render_num]["stats"], world["engine"], render_num)
         canvas.save(output + ".png")
         print boards[render_num]["name"]
 

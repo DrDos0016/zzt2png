@@ -8,7 +8,7 @@ Either run without any command-line arguments and follow the prompts, or specify
 
 python zzt2png.py <filename> <board> <output>
 
-<filename> is the ZZT world (or save) you wish to process.
+<filename> is the ZZT or Super ZZT world (or save) you wish to process.
 <board> is the board number to use, starting with 0 for the title screen. Additionally use ? for a random board or A to render all boards.
 <output> is the filename for the screenshot without a .png extension. If all boards are being rendered a numeric suffix is applied.
 
