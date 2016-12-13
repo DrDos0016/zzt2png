@@ -9,6 +9,7 @@ from PIL import Image
 INVISIBLE_MODE = 1  # 0: render as an empty tile | 1: render in editor style | 2: render as touched
 
 BASE_DIR = "C:\\Users\\Kevin\\Documents\\programming\\zzt2png\\"
+MAX_SIGNED_INT = 0x7FFF
 BG_COLORS = ("000000", "0000A8", "00A800", "00A8A8", "A80000", "A800A8", "A85400", "A8A8A8",
              "545454", "5454FC", "54FC54", "54FCFC", "FC5454", "FC54FC", "FCFC54", "FCFCFC")
 ZZT_DATA = {
@@ -52,7 +53,7 @@ def open_binary(path):
     return os.open(path, flags)
 
 
-def read(world_file):
+def read1(world_file):
     """Read one byte as an int"""
 
     temp = ord(os.read(world_file, 1))
@@ -65,6 +66,16 @@ def read2(world_file):
     part1 = binascii.hexlify(str(os.read(world_file, 1)))
     part2 = binascii.hexlify(str(os.read(world_file, 1)))
     return int(part2 + part1, 16)
+
+
+def read4(world_file):
+    """Read 4 bytes and convert to an integer"""
+
+    part1 = binascii.hexlify(str(os.read(world_file, 1)))
+    part2 = binascii.hexlify(str(os.read(world_file, 1)))
+    part3 = binascii.hexlify(str(os.read(world_file, 1)))
+    part4 = binascii.hexlify(str(os.read(world_file, 1)))
+    return int(part4 + part3 + part2 + part1, 16)
 
 
 def sread(world_file, num):
@@ -116,42 +127,56 @@ def get_element_character(elements, element):
 def parse_board(engine_data, world_file):
         board = {"tiles": [], "stats": []}
 
-        board_name_length = read(world_file)
+        board_name_length = read1(world_file)
         board["name"] = sread(world_file, engine_data["board_name_size"])[:board_name_length]
 
         parsed_tiles = 0
         while parsed_tiles < engine_data["height"]*engine_data["width"]:
-            quantity = read(world_file)
+            quantity = read1(world_file)
             if quantity == 0:  # Just in case some weird WiL or Chronos30 world uses this
                 quantity = 256
-            element_id = read(world_file)
-            color = read(world_file)
+            element_id = read1(world_file)
+            color = read1(world_file)
             for tile_count in xrange(0, quantity):
                 board["tiles"].append({"element": element_id, "color": color})
             parsed_tiles += quantity
 
         # Parse Stats
-        os.lseek(world_file, 86, 1)  # Skip 86 bytes of board + message info that we don't care about
+        board["max_player_shots"] = read1(world_file)
+        board["is_dark"] = read1(world_file)
+        board["exit_north"] = read1(world_file)
+        board["exit_south"] = read1(world_file)
+        board["exit_west"] = read1(world_file)
+        board["exit_east"] = read1(world_file)
+        board["restart_on_zap"] = read1(world_file)
+        board["message_length"] = read1(world_file)
+        board["message"] = sread(world_file, 58)[:board["message_length"]]
+        board["player_enter_x"] = read1(world_file)
+        board["player_enter_y"] = read1(world_file)
+        board["time_limit"] = read2(world_file)
+        os.lseek(world_file, engine_data["board_property_padding"], 1)  # Skip unused filler
         stat_count = read2(world_file)
+
+        # byte missing in stats, I think
 
         parsed_stats = 0
         while parsed_stats <= stat_count:
-            stat = {"x": read(world_file), "y": read(world_file), "x-step": read2(world_file),
-                    "y-step": read2(world_file)}
+            stat = {"x": read1(world_file), "y": read1(world_file),
+                    "x-step": read2(world_file), "y-step": read2(world_file),
 
-            os.lseek(world_file, 2, 1)
-            stat["param1"] = read(world_file)
-            stat["param2"] = read(world_file)
-            stat["param3"] = read(world_file)
-            os.lseek(world_file, 12, 1)
+                    "cycle": read2(world_file),
+                    "param1": read1(world_file), "param2": read1(world_file), "param3": read1(world_file),
+                    "follower": read2(world_file), "leader": read2(world_file),
+                    "under_element": read1(world_file), "under_color": read1(world_file),
+                    "program_pointer": read4(world_file), "program_counter": read2(world_file)}
+
             oop_length = read2(world_file)
             os.lseek(world_file, engine_data["stat_padding"], 1)
 
-            if oop_length > 32767:  # Pre-bound element
-                oop_length = 0
-
-            if oop_length:
-                sread(world_file, oop_length)
+            if oop_length > MAX_SIGNED_INT:  # Pre-bound element
+                stat["program"] = oop_length - MAX_SIGNED_INT - 1
+            elif oop_length:
+                stat["program"] = sread(world_file, oop_length)
 
             board["stats"].append(stat)
             parsed_stats += 1
@@ -170,9 +195,9 @@ def parse_file(file_name):
         world["ammo"] = read2(world_file)
         world["gems"] = read2(world_file)
         for count in xrange(0, 9):
-            world["keys"].append(read(world_file) != 0)
+            world["keys"].append(read1(world_file) != 0)
         world["health"] = read2(world_file)
-        world["active_board"] = read(world_file)
+        world["active_board"] = read1(world_file)
 
         if engine_identity == 0xFFFF:
             world["engine"] = ZZT_DATA
@@ -182,14 +207,14 @@ def parse_file(file_name):
             world["energizer_remaining"] = read2(world_file)
             read2(world_file)  # unused data
             world["score"] = read2(world_file)
-            name_length = read(world_file)
+            name_length = read1(world_file)
             world["name"] = sread(world_file, 20)[:name_length]
             for count in xrange(0, 9):
-                flag_length = read(world_file)
+                flag_length = read1(world_file)
                 world["flags"].append(sread(world_file, 20)[:flag_length])
             world["time_passed"] = read2(world_file)
             world["time_passed2"] = read2(world_file)  # change name
-            world["is_locked"] = read(world_file)
+            world["is_locked"] = read1(world_file)
 
             board_offset = 512  # parse boards
             for idx in xrange(0, world["board_count"] + 1):
@@ -252,11 +277,11 @@ def render(tiles, stat_data, engine_data, render_num):
             elif element == elements["TRANSPORTER"]:
                 stat = get_stats(x, y, stat_data)
                 if stat is not None:
-                    if stat["x-step"] > 32767:
+                    if stat["x-step"] > MAX_SIGNED_INT:
                         transporter_char = 60  # West
                     elif stat["x-step"] > 0:
                         transporter_char = 62  # East
-                    elif stat["y-step"] <= 32767:
+                    elif stat["y-step"] <= MAX_SIGNED_INT:
                         transporter_char = 118  # South
                     else:
                         transporter_char = 94  # North (or Idle)
