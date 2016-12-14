@@ -4,12 +4,17 @@ import os
 import random
 import sys
 
+from collections import OrderedDict
 from PIL import Image
 
 INVISIBLE_MODE = 1  # 0: render as an empty tile | 1: render in editor style | 2: render as touched
 
 BASE_DIR = "C:\\Users\\Kevin\\Documents\\programming\\zzt2png\\"
 MAX_SIGNED_INT = 0x7FFF
+
+WHITE_TEXT_INDEX = 0x06
+TEXT_LENGTH = 0x10
+
 BG_COLORS = ("000000", "0000A8", "00A800", "00A8A8", "A80000", "A800A8", "A85400", "A8A8A8",
              "545454", "5454FC", "54FC54", "54FCFC", "FC5454", "FC54FC", "FCFC54", "FCFCFC")
 ZZT_DATA = {
@@ -20,19 +25,19 @@ ZZT_DATA = {
     "board_name_size": 50,
     "board_property_padding": 16,
     "stat_padding": 8,
-    "absent_elements": [],
-    "blank_elements": []
+    "absent_elements": frozenset([]),
+    "blank_elements": frozenset(["MESSENGER"])
 }
-CHARACTERS = {
-    "EMPTY": 32, "EDGE": 32, "MESSENGER": 32, "MONITOR": 32, "PLAYER": 2, "AMMO": 132, "TORCH": 157,
-    "GEM": 4, "KEY": 12, "DOOR": 10, "SCROLL": 232, "PASSAGE": 240, "DUPLICATOR": 250, "BOMB": 11,
-    "ENERGIZER": 127, "STAR": 47, "CLOCKWISE": 47, "COUNTER": 47, "BULLET": 248, "WATER": 176,
-    "FOREST": 176, "SOLID": 219, "NORMAL": 178, "BREAKABLE": 177, "BOULDER": 254, "SLIDERNS": 18,
-    "SLIDEREW": 29, "FAKE": 178, "INVISIBLE": 32, "BLINKWALL": 206, "TRANSPORTER": 94, "LINE": 206,
-    "RICOCHET": 42, "HORIZRAY": 205, "BEAR": 153, "RUFFIAN": 5, "OBJECT": 2, "SLIME": 42, "SHARK": 94,
-    "SPINNINGGUN": 24, "PUSHER": 31, "LION": 234, "TIGER": 227, "VERTRAY": 186, "HEAD": 233,
-    "SEGMENT": 79, "UNUSED": 32
-}
+ELEMENTS = OrderedDict([
+    ("EMPTY", 32), ("EDGE", 32), ("MESSENGER", 2), ("MONITOR", 32), ("PLAYER", 2), ("AMMO", 132), ("TORCH", 157),
+    ("GEM", 4), ("KEY", 12), ("DOOR", 10), ("SCROLL", 232), ("PASSAGE", 240), ("DUPLICATOR", 250), ("BOMB", 11),
+    ("ENERGIZER", 127), ("STAR", 47), ("CLOCKWISE", 47), ("COUNTER", 47), ("BULLET", 248), ("WATER", 176),
+    ("FOREST", 176), ("SOLID", 219), ("NORMAL", 178), ("BREAKABLE", 177), ("BOULDER", 254), ("SLIDERNS", 18),
+    ("SLIDEREW", 29), ("FAKE", 178), ("INVISIBLE", 32), ("BLINKWALL", 206), ("TRANSPORTER", 94), ("LINE", 206),
+    ("RICOCHET", 42), ("HORIZRAY", 205), ("BEAR", 153), ("RUFFIAN", 5), ("OBJECT", 2), ("SLIME", 42), ("SHARK", 94),
+    ("SPINNINGGUN", 24), ("PUSHER", 31), ("LION", 234), ("TIGER", 227), ("VERTRAY", 186), ("HEAD", 233),
+    ("SEGMENT", 79), ("UNUSED", 32), ("TEXTSTART", None)
+])
 FG_GRAPHICS = (Image.open(BASE_DIR + "gfx/black.png"), Image.open(BASE_DIR + "gfx/darkblue.png"),
                Image.open(BASE_DIR + "gfx/darkgreen.png"), Image.open(BASE_DIR + "gfx/darkcyan.png"),
                Image.open(BASE_DIR + "gfx/darkred.png"), Image.open(BASE_DIR + "gfx/darkpurple.png"),
@@ -89,17 +94,14 @@ def sread(world_file, num):
     return temp
 
 
-def get_elements_dict(data):
-    return {
-        "EMPTY": 0x00, "EDGE": 0x01, "MESSENGER": 0x02, "MONITOR": 0x03, "PLAYER": 0x04, "AMMO": 0x05, "TORCH": 0x06,
-        "GEM": 0x07, "KEY": 0x08, "DOOR": 0x09, "SCROLL": 0x0A, "PASSAGE": 0x0B, "DUPLICATOR": 0x0C, "BOMB": 0x0D,
-        "ENERGIZER": 0x0E, "STAR": 0x0F, "CLOCKWISE": 0x10, "COUNTER": 0x11, "BULLET": 0x12, "WATER": 0x13,
-        "FOREST": 0x14, "SOLID": 0x15, "NORMAL": 0x16, "BREAKABLE": 0x17, "BOULDER": 0x18, "SLIDERNS": 0x19,
-        "SLIDEREW": 0x1A, "FAKE": 0x1B, "INVISIBLE": 0x1C, "BLINKWALL": 0x1D, "TRANSPORTER": 0x1E, "LINE": 0x1F,
-        "RICOCHET": 0x20, "HORIZRAY": 0x21, "BEAR": 0x22, "RUFFIAN": 0x23, "OBJECT": 0x24, "SLIME": 0x25, "SHARK": 0x26,
-        "SPINNINGGUN": 0x27, "PUSHER": 0x28, "LION": 0x29, "TIGER": 0x2A, "VERTRAY": 0x2B, "HEAD": 0x2C,
-        "SEGMENT": 0x2D, "UNUSED": 0x2E, "TEXTSTART": 0x2F, "WHITETEXT": 0x35, "TEXTEND": 0x45
-    }
+def get_elements_dict(engine_data):
+    result = {key: index for index, key in enumerate(
+        filter(lambda element: element not in engine_data["absent_elements"], ELEMENTS.keys())
+    )}
+    result["WHITETEXT"] = result["TEXTSTART"] + WHITE_TEXT_INDEX
+    result["TEXTEND"] = result["TEXTSTART"] + TEXT_LENGTH
+
+    return result
 
 
 def get_tile(char, fg_color, bg_color, opaque):
@@ -121,7 +123,7 @@ def get_stats(x, y, stat_data):
 
 
 def get_element_character(elements, element):
-    return CHARACTERS[next((key for key, value in elements.iteritems() if value == element), None)]
+    return ELEMENTS[next((key for key, value in elements.iteritems() if value == element), None)]
 
 
 def parse_board(engine_data, world_file):
@@ -325,6 +327,8 @@ def render(tiles, stat_data, engine_data, render_num):
                     char = get_tile(color, 0xF, int(element - 0x2F + 1), True)
             elif element > elements["TEXTEND"]:  # Invalid
                 char = get_tile(168, fg_color, bg_color, True)
+            elif element in (elements[key] for key in engine_data["blank_elements"]):
+                char = get_tile(32, fg_color, bg_color, True)
 
             if char is None:
                 char = get_tile(get_element_character(elements, element), fg_color, bg_color, True)
