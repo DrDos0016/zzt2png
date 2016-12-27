@@ -12,8 +12,9 @@ INVISIBLE_MODE = 1  # 0: render as an empty tile | 1: render in editor style | 2
 BASE_DIR = "C:\\Users\\Kevin\\Documents\\programming\\zzt2png\\"
 MAX_SIGNED_INT = 0x7FFF
 
-WHITE_TEXT_INDEX = 0x06
-TEXT_LENGTH = 0x10
+UNUSED_ELEMENT = "UNUSED"
+WHITE_TEXT_OFFSET = 0x06
+TEXT_END_OFFSET = 0x10
 
 BG_COLORS = ("000000", "0000A8", "00A800", "00A8A8", "A80000", "A800A8", "A85400", "A8A8A8",
              "545454", "5454FC", "54FC54", "54FCFC", "FC5454", "FC54FC", "FCFC54", "FCFCFC")
@@ -24,19 +25,40 @@ ZZT_DATA = {
     "board_start_location": 512,
     "board_name_size": 50,
     "board_property_padding": 16,
+    "stranded_padding": 0,
+    "postponed_padding": 1,
     "stat_padding": 8,
-    "absent_elements": frozenset([]),
-    "blank_elements": frozenset(["MESSENGER"])
+    "absent_elements": frozenset(["UNUSED", "LAVA", "FLOOR", "WATERN", "WATERS", "WATERW", "WATERE",
+                                  "ROTON", "DRAGONPUP", "PAIRER", "SPIDER", "WEB", "STONE"]),
+    "blank_elements": frozenset(["MESSENGER"]),
+    "stranded_elements": list([]),
+    "postponed_elements": list([])
 }
-ELEMENTS = OrderedDict([
+SUPERZ_DATA = {
+    "width": 96,
+    "height": 80,
+    "total_flags": 12,
+    "board_start_location": 512,
+    "board_name_size": 50,
+    "board_property_padding": 14,
+    "stranded_padding": 7,
+    "postponed_padding": 4,
+    "stat_padding": 0,
+    "absent_elements": frozenset(["UNUSED"]),
+    "blank_elements": frozenset(["TORCH", "WATER", "SHARK"]),
+    "stranded_elements": list(["ROTON", "DRAGONPUP", "PAIRER", "SPIDER", "WEB", "STONE"]),
+    "postponed_elements": list(["BULLET", "HORIZRAY", "VERTRAY", "STAR"])
+}
+ELEMENT_DEFINITIONS = OrderedDict([
     ("EMPTY", 32), ("EDGE", 32), ("MESSENGER", 2), ("MONITOR", 32), ("PLAYER", 2), ("AMMO", 132), ("TORCH", 157),
     ("GEM", 4), ("KEY", 12), ("DOOR", 10), ("SCROLL", 232), ("PASSAGE", 240), ("DUPLICATOR", 250), ("BOMB", 11),
     ("ENERGIZER", 127), ("STAR", 47), ("CLOCKWISE", 47), ("COUNTER", 47), ("BULLET", 248), ("WATER", 176),
-    ("FOREST", 176), ("SOLID", 219), ("NORMAL", 178), ("BREAKABLE", 177), ("BOULDER", 254), ("SLIDERNS", 18),
-    ("SLIDEREW", 29), ("FAKE", 178), ("INVISIBLE", 32), ("BLINKWALL", 206), ("TRANSPORTER", 94), ("LINE", 206),
-    ("RICOCHET", 42), ("HORIZRAY", 205), ("BEAR", 153), ("RUFFIAN", 5), ("OBJECT", 2), ("SLIME", 42), ("SHARK", 94),
-    ("SPINNINGGUN", 24), ("PUSHER", 31), ("LION", 234), ("TIGER", 227), ("VERTRAY", 186), ("HEAD", 233),
-    ("SEGMENT", 79), ("UNUSED", 32), ("TEXTSTART", None)
+    ("LAVA", 111), ("FOREST", 176), ("SOLID", 219), ("NORMAL", 178), ("BREAKABLE", 177), ("BOULDER", 254),
+    ("SLIDERNS", 18), ("SLIDEREW", 29), ("FAKE", 178), ("INVISIBLE", 32), ("BLINKWALL", 206), ("TRANSPORTER", 94),
+    ("LINE", 206), ("RICOCHET", 42), ("HORIZRAY", 205), ("BEAR", 153), ("RUFFIAN", 5), ("OBJECT", 2), ("SLIME", 42),
+    ("SHARK", 94), ("SPINNINGGUN", 24), ("PUSHER", 31), ("LION", 234), ("TIGER", 227), ("VERTRAY", 186), ("HEAD", 233),
+    ("SEGMENT", 79), (UNUSED_ELEMENT, 32), ("FLOOR", 176), ("WATERN", 30), ("WATERS", 31), ("WATERW", 11), ("WATERE", 10),
+    ("ROTON", 148), ("DRAGONPUP", 237), ("PAIRER", 229), ("SPIDER", 15), ("WEB", 197), ("STONE", 90)
 ])
 FG_GRAPHICS = (Image.open(BASE_DIR + "gfx/black.png"), Image.open(BASE_DIR + "gfx/darkblue.png"),
                Image.open(BASE_DIR + "gfx/darkgreen.png"), Image.open(BASE_DIR + "gfx/darkcyan.png"),
@@ -49,6 +71,9 @@ FG_GRAPHICS = (Image.open(BASE_DIR + "gfx/black.png"), Image.open(BASE_DIR + "gf
 LINE_CHARACTERS = {"----": 249, "---W": 181, "--E-": 198, "--EW": 205, "-S--": 210, "-S-W": 187, "-SE-": 201,
                    "-SEW": 203, "N---": 208, "N--W": 188, "N-E-": 200, "N-EW": 202, "NS--": 186, "NS-W": 185,
                    "NSE-": 204, "NSEW": 206}
+WEB_CHARACTERS = {"----": 250, "---W": 196, "--E-": 196, "--EW": 196, "-S--": 179, "-S-W": 191, "-SE-": 218,
+                  "-SEW": 194, "N---": 179, "N--W": 217, "N-E-": 192, "N-EW": 193, "NS--": 179, "NS-W": 180,
+                  "NSE-": 195, "NSEW": 197}
 
 
 def open_binary(path):
@@ -94,12 +119,23 @@ def sread(world_file, num):
     return temp
 
 
-def get_elements_dict(engine_data):
-    result = {key: index for index, key in enumerate(
-        filter(lambda element: element not in engine_data["absent_elements"], ELEMENTS.keys())
-    )}
-    result["WHITETEXT"] = result["TEXTSTART"] + WHITE_TEXT_INDEX
-    result["TEXTEND"] = result["TEXTSTART"] + TEXT_LENGTH
+def get_elements_list(engine_data):
+    replaced_elements = set(engine_data["stranded_elements"])
+    replaced_elements.union(engine_data["postponed_elements"])
+    filler = [UNUSED_ELEMENT]
+
+    result = list(element if element not in replaced_elements else UNUSED_ELEMENT
+              for element in ELEMENT_DEFINITIONS.keys() if element not in engine_data["absent_elements"])
+    result += (filler*engine_data["stranded_padding"]) + engine_data["stranded_elements"]\
+        + (filler*engine_data["postponed_padding"]) + engine_data["postponed_elements"]
+
+    result.append("TEXTSTART")
+
+    result.extend(filler*(WHITE_TEXT_OFFSET-1))
+    result.append("WHITETEXT")
+
+    result.extend(filler*(TEXT_END_OFFSET-WHITE_TEXT_OFFSET-1))
+    result.append("TEXTEND")
 
     return result
 
@@ -122,8 +158,22 @@ def get_stats(x, y, stat_data):
     return next((stat for stat in stat_data if x == stat["x"] - 1 and y == stat["y"] - 1), None)
 
 
-def get_element_character(elements, element):
-    return ELEMENTS[next((key for key, value in elements.iteritems() if value == element), None)]
+def get_tile_contiguity(tiles, element, x, y):
+    contiguity_key = ""
+
+    # Is a line or board edge to the north?
+    contiguity_key += ("N" if y == 0 or tiles[(y - 1) * 60 + x]["element"] == element else "-")
+
+    # Is a line or board edge to the south?
+    contiguity_key += ("S" if y == 24 or tiles[(y + 1) * 60 + x]["element"] == element else "-")
+
+    # Is a line or board edge to the east?
+    contiguity_key += ("E" if x == 59 or tiles[y * 60 + (x + 1)]["element"] == element else "-")
+
+    # Is a line or board edge to the west?
+    contiguity_key += ("W" if x == 0 or tiles[y * 60 + (x - 1)]["element"] == element else "-")
+
+    return contiguity_key
 
 
 def parse_board(engine_data, world_file):
@@ -219,7 +269,7 @@ def parse_file(file_name):
             world["is_locked"] = read1(world_file)
 
             board_offset = 512  # parse boards
-            for idx in xrange(0, world["board_count"] + 1):
+            for idx in xrange(0, (world["board_count"] + 1)):
                 os.lseek(world_file, board_offset, 0)  # Jump to board data
                 board_size = read2(world_file)
 
@@ -234,7 +284,8 @@ def parse_file(file_name):
 
 def render(tiles, stat_data, engine_data, render_num):
     canvas = Image.new("RGBA", (480, 350))
-    elements = get_elements_dict(engine_data)
+    element_index = get_elements_list(engine_data)
+    elements = {element: index for index, element in enumerate(element_index)}
 
     tile_dispenser = (tile for tile in tiles)
     for y in xrange(0, engine_data["height"]):
@@ -247,7 +298,9 @@ def render(tiles, stat_data, engine_data, render_num):
             bg_color = int(color / 0x10)
 
             char = None
-            if element == elements["EMPTY"]:
+            if element in (elements[key] for key in engine_data["blank_elements"]):
+                char = get_tile(32, fg_color, bg_color, True)
+            elif element == elements["EMPTY"]:
                 char = get_tile(color, 0x0, 0x0, True)
             elif element == elements["PLAYER"] and render_num == 0 \
                     and stat_data[0]["x"] - 1 == x and stat_data[0]["y"] - 1 == y:
@@ -289,21 +342,7 @@ def render(tiles, stat_data, engine_data, render_num):
                         transporter_char = 94  # North (or Idle)
                     char = get_tile(transporter_char, fg_color, bg_color, True)
             elif element == elements["LINE"]:
-                line_key = ""
-
-                # Is a line or board edge to the north?
-                line_key += ("N" if y == 0 or tiles[(y - 1) * 60 + x]["element"] == 31 else "-")
-
-                # Is a line or board edge to the south?
-                line_key += ("S" if y == 24 or tiles[(y + 1) * 60 + x]["element"] == 31 else "-")
-
-                # Is a line or board edge to the east?
-                line_key += ("E" if x == 59 or tiles[y * 60 + (x + 1)]["element"] == 31 else "-")
-
-                # Is a line or board edge to the west?
-                line_key += ("W" if x == 0 or tiles[y * 60 + (x - 1)]["element"] == 31 else "-")
-
-                char = get_tile(LINE_CHARACTERS[line_key], fg_color, bg_color, True)
+                char = get_tile(LINE_CHARACTERS[get_tile_contiguity(tiles, element, x, y)], fg_color, bg_color, True)
             elif element == elements["OBJECT"]:
                 stat = get_stats(x, y, stat_data)
                 if stat is not None:
@@ -327,11 +366,11 @@ def render(tiles, stat_data, engine_data, render_num):
                     char = get_tile(color, 0xF, int(element - 0x2F + 1), True)
             elif element > elements["TEXTEND"]:  # Invalid
                 char = get_tile(168, fg_color, bg_color, True)
-            elif element in (elements[key] for key in engine_data["blank_elements"]):
-                char = get_tile(32, fg_color, bg_color, True)
+            elif "WEB" in elements.keys() and element == elements["WEB"]:
+                char = get_tile(WEB_CHARACTERS[get_tile_contiguity(tiles, element, x, y)], fg_color, bg_color, True)
 
             if char is None:
-                char = get_tile(get_element_character(elements, element), fg_color, bg_color, True)
+                char = get_tile(ELEMENT_DEFINITIONS[element_index[element]], fg_color, bg_color, True)
 
             canvas.paste(char, (x * 8, y * 14))
 
