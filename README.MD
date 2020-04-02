@@ -2,6 +2,12 @@
 
 zzt2png is a command-line script to create PNG renders of boards in ZZT worlds.
 
+## Deprecation
+
+This project is no longer in development. It has been superseded by the
+[Zookeeper](https://github.com/DrDos0016/zookeeper) library which contains functionality for converting ZZT boards
+to PNG images in addition to parsing and modifying ZZT file data using Python 3.
+
 ## Usage
 
 Either run without any command-line arguments and follow the prompts, or specify all arguments from the command-line.
@@ -9,7 +15,9 @@ Either run without any command-line arguments and follow the prompts, or specify
 python zzt2png.py <filename> <board> <output>
 
 <filename> is the ZZT world (or save) you wish to process.
+
 <board> is the board number to use, starting with 0 for the title screen. Additionally use ? for a random board or A to render all boards.
+
 <output> is the filename for the screenshot without a .png extension. If all boards are being rendered a numeric suffix is applied.
 
 Additionally the INVISIBLE_MODE constant can be manually edited to change how invisible walls appear.
